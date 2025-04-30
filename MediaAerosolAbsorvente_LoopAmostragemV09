@@ -1,0 +1,65 @@
+var table = ee.FeatureCollection("users/arthurcito/limites_roraima");
+
+/*
+//Loop para as 20 semanas com mais focos de calor (MODIS + VIIRS) onde há valores positivos de Aerosol Absorvente do TROPOMI.
+*/
+
+// Lista de semanas que você quer processar
+var semanas = [
+  37, 294, 298, 39, 38, 35, 34, 297, 36, 40,
+  293, 299, 295, 296, 246, 33, 301, 291,
+  290, 88
+]; 
+/*
+// As semanas 88_0indexado87 e 91_0indexado90 foram 
+// substituidas por 291_0indexado290 e 89_0indexado88 
+// por nao terem dados de aerosol absorvente positivo.
+*/
+
+// Geometria da área de interesse
+var geometry = table; // Seu shapefile carregado
+var limiar = 0;
+
+// Data inicial da semana 0
+var dataInicial = ee.Date('2018-07-01');
+
+// Função para processar uma semana
+var processarSemana = function(semana) {
+  // Calcula a data de início e fim da semana
+  var startDate = dataInicial.advance(semana, 'week');
+  var endDate = startDate.advance(6, 'day');
+  
+  var filterDate = startDate.format('YYYY-MM-dd').cat('_a_').cat(endDate.format('YYYY-MM-dd'));
+
+  var semanaNomeada = semana + 1; // <<< aqui ajusta o nome da semana para exportação
+  
+  // Coleta os dados da coleção
+  var collection = ee.ImageCollection('COPERNICUS/S5P/OFFL/L3_AER_AI')
+    .select('absorbing_aerosol_index')
+    .filterDate(startDate, endDate);
+
+  // Calcula o percentil 75%
+  var mediaImage = collection.mean().clip(geometry);
+
+  // Máscaras de background e poluição
+  var background = mediaImage.updateMask(mediaImage.lte(limiar));
+  var polluted = mediaImage.updateMask(mediaImage.gt(limiar));
+
+  // Adiciona ao mapa
+  Map.addLayer(background, {min: -1, max: limiar, palette: ['#cccccc']}, 'Media Background - Semana ' + semanaNomeada, false);
+  Map.addLayer(polluted, {min: limiar, max: 2, palette: ['yellow', 'red']}, 'Media Fumaça - Semana ' + semanaNomeada);
+
+  // Exporta a imagem
+  Export.image.toDrive({
+    image: mediaImage,
+    description: 'Media_Semana_' + semanaNomeada,
+    scale: 1113.2,
+    region: geometry
+  });
+};
+
+// Aplica a função a cada semana na lista
+semanas.forEach(processarSemana);
+
+// Centraliza o mapa
+Map.setCenter(-60.873, 2.0, 6.5);
