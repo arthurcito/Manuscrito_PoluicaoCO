@@ -1,0 +1,108 @@
+//Imports:
+var points_0 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas11a20/AmostV09_PontosAmostrais_Semana34_0index33"),
+    points_1 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas01a10/AmostV09_PontosAmostrais_Semana35_0index34"),
+    points_2 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas01a10/AmostV09_PontosAmostrais_Semana36_0index35"),
+    points_3 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas01a10/AmostV09_PontosAmostrais_Semana37_0index36"),
+    points_4 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas01a10/AmostV09_PontosAmostrais_Semana38_0index37"),
+    points_5 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas01a10/AmostV09_PontosAmostrais_Semana39_0index38"),
+    points_6 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas01a10/AmostV09_PontosAmostrais_Semana40_0index39"),
+    points_7 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas01a10/AmostV09_PontosAmostrais_Semana41_0index40"),
+    points_8 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas11a20/AmostV09_PontosAmostrais_Semana89_0index88"),
+    points_9 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas11a20/AmostV09_PontosAmostrais_Semana247_0index246"),
+    points_10 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas11a20/AmostV09_PontosAmostrais_Semana291_0index290"),
+    points_11 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas11a20/AmostV09_PontosAmostrais_Semana292_0index291"),
+    points_12 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas11a20/AmostV09_PontosAmostrais_Semana294_0index293"),
+    points_13 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas01a10/AmostV09_PontosAmostrais_Semana295_0index294"),
+    points_14 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas11a20/AmostV09_PontosAmostrais_Semana296_0index295"),
+    points_15 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas11a20/AmostV09_PontosAmostrais_Semana297_0index296"),
+    points_16 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas01a10/AmostV09_PontosAmostrais_Semana298_0index297"),
+    points_17 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas01a10/AmostV09_PontosAmostrais_Semana299_0index298"),
+    points_18 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas11a20/AmostV09_PontosAmostrais_Semana300_0index299"),
+    points_19 = ee.FeatureCollection("projects/ee-arthurcito/assets/AmostragemV09/Semanas11a20/AmostV09_PontosAmostrais_Semana302_0index301");
+
+/*
+//Loop individualizando cada leitura de conjunto de Pontos Amostrais a sua respectiva semana de referência.
+*/
+
+// Escala
+var scale = 1113.2;
+
+/*
+// Semanas específicas (a partir de 01/07/2018)
+//*** Observar que nessa lista o 0 está indexado, 
+//*** ou seja, a primeira semana é a semana 0.
+*/
+var semanas = [
+  33, 34, 35, 36, 37, 38, 39, 40, 88, 246,
+  290, 291, 293, 294, 295, 296, 297, 298, 299, 301
+];
+
+// Assets com nomes padronizados já importados no "Imports"
+var assetsDePontos = [
+  points_0, points_1, points_2, points_3, points_4,
+  points_5, points_6, points_7, points_8, points_9,
+  points_10, points_11, points_12, points_13, points_14,
+  points_15, points_16, points_17, points_18, points_19
+];
+
+// Lista para armazenar os resultados
+var listaFeatures = [];
+
+// Loop tradicional para evitar problemas com ee.Number e indexação
+for (var i = 0; i < semanas.length; i++) {
+  var semana = semanas[i];
+  var startDate = ee.Date('2018-07-01').advance(semana, 'week');
+  var endDate = startDate.advance(6, 'day');
+
+  var points = assetsDePontos[i];
+
+  var meanImage = ee.ImageCollection('COPERNICUS/S5P/OFFL/L3_CO')
+    .select('CO_column_number_density')
+    .filterDate(startDate, endDate)
+    .mean();
+
+  var valoresPorPonto = meanImage.reduceRegions({
+    collection: points,
+    reducer: ee.Reducer.mean(),
+    scale: scale,
+    tileScale: 4,
+    maxPixelsPerRegion: 1e13
+  });
+
+  var valoresFiltrados = valoresPorPonto
+    .filter(ee.Filter.notNull(['mean']))
+    .aggregate_array('mean');
+
+  var mediaSemana = ee.Array(valoresFiltrados).reduce('mean', [0]);
+
+  var feature = ee.Feature(null, {
+    'Semana': semana,
+    'Data_Início': startDate.format('YYYY-MM-dd'),
+    'Média_CO': mediaSemana
+  });
+
+  listaFeatures.push(feature);
+}
+
+// Cria uma FeatureCollection a partir da lista
+var statsFC = ee.FeatureCollection(listaFeatures);
+
+// Mostra a tabela 
+//*** A TABELA NAO ESTA APARECENDO. CORRIGIR TRECHO ***//
+print('📋 Tabela com Média Semanal de CO (20 semanas específicas):', statsFC);
+
+// Gera gráfico
+var chart = ui.Chart.feature.byFeature(statsFC, 'Semana', 'Média_CO')
+  .setChartType('LineChart')
+  .setOptions({
+    title: 'Média Semanal de CO - 20 Semanas Específicas',
+    hAxis: { title: 'Semana' },
+    vAxis: { title: 'CO médio (mol/m²)' },
+    lineWidth: 2,
+    pointSize: 4,
+    legend: { position: 'none' }
+  });
+
+print(chart);
+
+//*** ALTERAR CÓODIGO PARA APRESENTAR VALOR DA MEDIA NO CONSOLE E LINHA NO GRAFICO ***//
